@@ -1,6 +1,8 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.14;
 
+import "hardhat/console.sol";
+
 /// @title Ebay
 /// @notice Smart contract for auction based market place.
 contract Ebay {
@@ -21,6 +23,7 @@ contract Ebay {
         uint auctionEnd;
         uint bestOfferId;
         uint[] offerIds;
+        bool isActive;
     }
 
     /// @notice List of all auctions
@@ -49,6 +52,10 @@ contract Ebay {
     /// @notice Mapping of buyers and their offers
     mapping(address => uint[]) private userOffers;
 
+    mapping(uint => address[]) private auctionUsers;
+
+    address private manager;
+
     /// ============ Modifiers ============
 
     /// @notice Ensure auction exists
@@ -58,6 +65,14 @@ contract Ebay {
             _auctionId > 0 && _auctionId < nextAuctionId,
             "Auction does not exist"
         );
+        _;
+    }
+
+    /// @notice Ensure auction exists
+    modifier auctionIsActive(uint _auctionId) {
+        // Check if auctionId is active
+        Auction memory auction = auctions[_auctionId];
+        require(auction.isActive, "Auction is not active");
         _;
     }
 
@@ -96,7 +111,8 @@ contract Ebay {
             _minimumOfferPrice,
             block.timestamp + _duration,
             0,
-            offerIds
+            offerIds,
+            true
         );
 
         // Save the auction to user auction mapping
@@ -104,6 +120,8 @@ contract Ebay {
 
         // Increment the auction counter
         nextAuctionId++;
+
+        manager = msg.sender;
     }
 
     /// @notice Creates a new offer for an auction.
@@ -112,6 +130,7 @@ contract Ebay {
         external
         payable
         auctionExists(_auctionId)
+        auctionIsActive(_auctionId)
     {
         // Retrieve the auction
         Auction storage auction = auctions[_auctionId];
@@ -122,10 +141,31 @@ contract Ebay {
         // Retrieve the best offer
         Offer storage bestOffer = offers[auction.bestOfferId];
 
+        //Get last offer price from this user
+        uint prevPrice = 0;
+        Offer[] memory prevOffers = getUserOffers(msg.sender);
+        if (prevOffers.length > 0) {
+            Offer memory lastOffer = prevOffers[prevOffers.length - 1];
+            prevPrice = lastOffer.offerPrice;
+        }
+
+        uint newPrice = msg.value;
+        if (prevPrice + newPrice > bestOffer.offerPrice) {
+            newPrice += prevPrice;
+            //If user still pays the full amount + margin, refund the unnecessary amount
+            if (prevOffers.length > 0 && msg.value > bestOffer.offerPrice) {
+                uint previousPrice = prevOffers[prevOffers.length - 1]
+                    .offerPrice;
+                uint remainder = msg.value - previousPrice;
+                newPrice = previousPrice + remainder;
+                payable(msg.sender).transfer(previousPrice);
+            }
+        }
+
         // price should be greater than minimum offer price
         require(
-            msg.value >= auction.minimumOfferPrice &&
-                msg.value > bestOffer.offerPrice,
+            newPrice >= auction.minimumOfferPrice &&
+                newPrice > bestOffer.offerPrice,
             "Price should be greater than minimum offer price and the best offer"
         );
 
@@ -137,7 +177,7 @@ contract Ebay {
             nextOfferId,
             _auctionId,
             msg.sender,
-            msg.value
+            newPrice
         );
 
         auction.offerIds.push(nextOfferId);
@@ -147,11 +187,18 @@ contract Ebay {
 
         // Increment the offer counter
         nextOfferId++;
+
+        //Add user to the auction
+        auctionUsers[_auctionId].push(msg.sender);
     }
 
     /// @notice Executes the auction trade.
     /// @param _auctionId - id of the auction.
-    function trade(uint _auctionId) external auctionExists(_auctionId) {
+    function trade(uint _auctionId)
+        external
+        auctionExists(_auctionId)
+        auctionIsActive(_auctionId)
+    {
         // Retrieve the auction
         Auction storage auction = auctions[_auctionId];
 
@@ -177,6 +224,26 @@ contract Ebay {
 
         // Send winning offer price to the seller
         payable(auction.seller).transfer(bestOffer.offerPrice);
+    }
+
+    function cancelAuction(uint _auctionId)
+        external
+        payable
+        auctionExists(_auctionId)
+        auctionIsActive(_auctionId)
+    {
+        require(msg.sender == manager, "Only auction creator can cancel it!");
+
+        address[] memory users = auctionUsers[_auctionId];
+
+        for (uint i = 0; i < users.length; i++) {
+            Offer[] memory prevOffers = getUserOffers(users[i]);
+            Offer memory lastOffer = prevOffers[prevOffers.length - 1];
+            //return money to each user
+            payable(lastOffer.buyer).transfer(lastOffer.offerPrice);
+        }
+
+        auctions[_auctionId].isActive = false;
     }
 
     /// ============ Getter Functions ============
@@ -208,11 +275,9 @@ contract Ebay {
 
     /// @notice - List of offers from a buyer
     /// @param _user - Buyer address
-    function getUserOffers(address _user)
-        external
-        view
-        returns (Offer[] memory)
-    {
+    function getUserOffers(
+        address _user //Changed from external to private: how will it afect the gas price?
+    ) private view returns (Offer[] memory) {
         uint[] storage userOfferIds = userOffers[_user];
         Offer[] memory _offers = new Offer[](userOfferIds.length);
         for (uint i = 0; i < userOfferIds.length; i++) {
@@ -240,5 +305,16 @@ contract Ebay {
             _offers[i] = offers[offerId];
         }
         return _offers;
+    }
+
+    /// @notice - List of users in an auction
+    /// @param _auctionId - Auction Id
+    function getAuctionUsers(uint _auctionId)
+        external
+        view
+        auctionExists(_auctionId)
+        returns (address[] memory)
+    {
+        return auctionUsers[_auctionId];
     }
 }
