@@ -317,4 +317,4 @@ contract Ebay {
     {
         return auctionUsers[_auctionId];
     }
-}
+}//
