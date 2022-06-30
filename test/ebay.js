@@ -145,11 +145,21 @@ describe("Ebay Contract", () => {
       });
       // Price less than best offer
       await expect(
-        EbayContract.connect(buyer1).createOffer(1, {
+        EbayContract.connect(buyer2).createOffer(1, {
           value: bestOffer - 1,
         })
       ).to.be.revertedWith(
         "Price should be greater than minimum offer price and the best offer"
+      );
+    });
+
+    it("Should NOT create offer if auction is cancelled", async () => {
+      await EbayContract.cancelAuction(1);
+      //auction cancelled
+      await expect(
+        EbayContract.connect(buyer1).createOffer(1, { value: AUCTION.min })
+      ).to.be.revertedWith(
+        "Auction is not active"
       );
     });
   });
@@ -190,6 +200,29 @@ describe("Ebay Contract", () => {
     it("should NOT trade if auction does not exist", async () => {
       await expect(EbayContract.trade(2)).to.be.revertedWith(
         "Auction does not exist"
+      );
+    });
+
+    it("should NOT trade if auction is cancelled", async () => {
+      const bestPrice = AUCTION.min + 10;
+
+      await EbayContract.connect(buyer1).createOffer(1, {
+        value: AUCTION.min,
+      });
+      await EbayContract.connect(buyer2).createOffer(1, {
+        value: bestPrice,
+      });
+
+      const balanceBefore = await ethers.provider.getBalance(seller.address);
+
+      //  Increase time to 10 seconds after duration
+      await network.provider.send("evm_increaseTime", [AUCTION.duration + 10]);
+      await network.provider.send("evm_mine");
+
+      await EbayContract.cancelAuction(1);
+
+      await expect(EbayContract.trade(1)).to.be.revertedWith(
+        "Auction is not active"
       );
     });
   });

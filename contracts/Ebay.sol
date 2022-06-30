@@ -275,9 +275,11 @@ contract Ebay {
 
     /// @notice - List of offers from a buyer
     /// @param _user - Buyer address
-    function getUserOffers(
-        address _user //Changed from external to private: how will it afect the gas price?
-    ) private view returns (Offer[] memory) {
+    function getUserOffers(address _user)
+        public//Changed from external to private: how will it afect the gas price?
+        view
+        returns (Offer[] memory)
+    {
         uint[] storage userOfferIds = userOffers[_user];
         Offer[] memory _offers = new Offer[](userOfferIds.length);
         for (uint i = 0; i < userOfferIds.length; i++) {
@@ -317,4 +319,4 @@ contract Ebay {
     {
         return auctionUsers[_auctionId];
     }
-}//
+}
