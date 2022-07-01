@@ -158,9 +158,46 @@ describe("Ebay Contract", () => {
       //auction cancelled
       await expect(
         EbayContract.connect(buyer1).createOffer(1, { value: AUCTION.min })
-      ).to.be.revertedWith(
-        "Auction is not active"
+      ).to.be.revertedWith("Auction is not active");
+    });
+
+    it.only("Should return eth to bidders if auction is cancelled", async () => {
+      //Bidder 1
+      const buyer1BalanceBefore = await ethers.provider.getBalance(
+        buyer1.address
       );
+      const txOffer1 = await EbayContract.connect(buyer1).createOffer(1, {
+        value: AUCTION.min,
+      });
+      const txReceipt1 = await txOffer1.wait();
+
+      //Bidder 2
+      const buyer2BalanceBefore = await ethers.provider.getBalance(
+        buyer2.address
+      );
+      const txOffer2 = await EbayContract.connect(buyer2).createOffer(1, {
+        value: AUCTION.min + 10,
+      });
+      const txReceipt2 = await txOffer2.wait();
+
+      //CANCEL AUCTION
+      await EbayContract.cancelAuction(1);
+
+      //Bidder 1 check returned balance
+      const gasUsed = txReceipt1.gasUsed.mul(txReceipt1.effectiveGasPrice);
+      const buyer1BalanceAfter = await ethers.provider.getBalance(
+        buyer1.address
+      );
+      const buyer1BalanceWithGas = buyer1BalanceAfter.add(gasUsed);
+      await expect(buyer1BalanceBefore).to.equal(buyer1BalanceWithGas);
+
+      //Bidder 2 check returned balance
+      const gasUsed2 = txReceipt2.gasUsed.mul(txReceipt2.effectiveGasPrice);
+      const buyer2BalanceAfter = await ethers.provider.getBalance(
+        buyer2.address
+      );
+      const buyer2BalanceWithGas = buyer2BalanceAfter.add(gasUsed2);
+      await expect(buyer2BalanceBefore).to.equal(buyer2BalanceWithGas);
     });
   });
 
@@ -177,9 +214,15 @@ describe("Ebay Contract", () => {
     it("Should trade", async () => {
       const bestPrice = AUCTION.min + 10;
 
-      await EbayContract.connect(buyer1).createOffer(1, {
+      const buyer1BalanceBefore = await ethers.provider.getBalance(
+        buyer1.address
+      );
+
+      const txOffer = await EbayContract.connect(buyer1).createOffer(1, {
         value: AUCTION.min,
       });
+      const txReceipt = await txOffer.wait();
+
       await EbayContract.connect(buyer2).createOffer(1, {
         value: bestPrice,
       });
@@ -195,6 +238,14 @@ describe("Ebay Contract", () => {
       await EbayContract.connect(random).trade(1);
       const balanceAfter = await ethers.provider.getBalance(seller.address);
       await expect(balanceAfter.sub(balanceBefore).toNumber()).equal(bestPrice);
+
+      //Check how much gas was spent on transaction and add it to the refunded balance for comparison
+      const gasUsed = txReceipt.gasUsed.mul(txReceipt.effectiveGasPrice);
+      const buyer1BalanceAfter = await ethers.provider.getBalance(
+        buyer1.address
+      );
+      const buyer1BalanceWithGas = buyer1BalanceAfter.add(gasUsed);
+      await expect(buyer1BalanceBefore).to.equal(buyer1BalanceWithGas);
     });
 
     it("should NOT trade if auction does not exist", async () => {
@@ -212,8 +263,6 @@ describe("Ebay Contract", () => {
       await EbayContract.connect(buyer2).createOffer(1, {
         value: bestPrice,
       });
-
-      const balanceBefore = await ethers.provider.getBalance(seller.address);
 
       //  Increase time to 10 seconds after duration
       await network.provider.send("evm_increaseTime", [AUCTION.duration + 10]);
