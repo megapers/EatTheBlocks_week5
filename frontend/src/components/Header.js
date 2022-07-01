@@ -1,13 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
 import Container from "react-bootstrap/esm/Container";
 import Navbar from "react-bootstrap/Navbar";
 import Button from "react-bootstrap/Button";
 import { Link } from "react-router-dom";
 import { Form, Modal } from "react-bootstrap";
 import { showError } from "../utils/common";
+import BlockchainContext from '../store/blockchain-context';
 
-const Header = ({ blockchain }) => {
+const Header = () => {
   const [show, setShow] = useState(false);
+
+  const blockchainContext = useContext(BlockchainContext);
+  const provider = blockchainContext.provider;
 
   //   Form fields
   const [name, setName] = useState("");
@@ -25,7 +29,7 @@ const Header = ({ blockchain }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await blockchain.ebay.createAuction(
+      await provider.ebay.createAuction(
         name,
         description,
         minimumOfferPrice,

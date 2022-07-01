@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
+import { ethers } from "ethers";
 import Container from "react-bootstrap/Container";
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
@@ -9,18 +10,21 @@ import Table from "react-bootstrap/Table";
 import { Link } from "react-router-dom";
 import { useLocation } from "react-router-dom";
 import { showError } from "../utils/common";
+import BlockchainContext from '../store/blockchain-context';
 
-const AuctionDetail = ({ blockchain }) => {
+const AuctionDetail = () => {
   // State to store offers
-  const [offers, setOffers] = useState([]);
-
+  const [contractValues, setContractValues] = useState({ offers: [], bestOffer: ethers.BigNumber.from('0') });
   // State to store offer
   const [offer, setOffer] = useState(0);
 
   const location = useLocation();
 
   const { auction } = location.state;
+  const bestOfferId = ethers.BigNumber.from(auction.bestOfferId).toNumber();
 
+  const blockchainContext = useContext(BlockchainContext);
+  const provider = blockchainContext.provider;
   /**
    * Create a new offer
    * @param {*} e
@@ -28,7 +32,7 @@ const AuctionDetail = ({ blockchain }) => {
   const createOffer = async (e) => {
     e.preventDefault();
     try {
-      await blockchain.ebay.createOffer(auction.id, { value: offer });
+      await provider.ebay.createOffer(auction.id, { value: offer });
       setOffer(0);
     } catch (error) {
       showError(error);
@@ -40,7 +44,7 @@ const AuctionDetail = ({ blockchain }) => {
    */
   const trade = async () => {
     try {
-      await blockchain.ebay.trade(auction.id);
+      await provider.ebay.trade(auction.id);
       setOffer(0);
     } catch (error) {
       showError(error);
@@ -51,13 +55,17 @@ const AuctionDetail = ({ blockchain }) => {
   useEffect(() => {
     (async () => {
       try {
-        blockchain.ebay &&
-          setOffers(await blockchain.ebay.getAuctionOffers(auction.id));
+        provider.ebay &&
+          setContractValues({
+            offers: await provider.ebay.getAuctionOffers(auction.id),
+            bestOffer: (await provider.ebay.offers(bestOfferId)).offerPrice,
+          });
+
       } catch (error) {
         showError(error);
       }
     })();
-  }, [blockchain, auction]);
+  }, [auction]);
 
   return (
     <Container className="py-2">
@@ -94,7 +102,7 @@ const AuctionDetail = ({ blockchain }) => {
                         placeholder="Enter offer"
                       />
                       <Form.Text className="text-muted">
-                        Minimum offer is {auction.minimumOfferPrice}
+                        Minimum offer is {ethers.BigNumber.from(contractValues.bestOffer).toNumber() + 1}
                       </Form.Text>
                     </Form.Group>
                   </Col>
@@ -131,9 +139,11 @@ const AuctionDetail = ({ blockchain }) => {
               </tr>
             </thead>
             <tbody>
-              {offers.map((offer) => (
+              {contractValues.offers.map((offer) => (
                 <tr>
-                  <td>{offer.buyer}</td>
+                  <Link to={`/buyer/${offer.buyer}`}>
+                    <td>{offer.buyer}</td>
+                  </Link>
                   <td>{offer.offerPrice.toString()}</td>
                 </tr>
               ))}

@@ -1,19 +1,24 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import Container from "react-bootstrap/Container";
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import Card from "react-bootstrap/Card";
 import Button from "react-bootstrap/Button";
 import { Link } from "react-router-dom";
-const AuctionList = ({ blockchain }) => {
+import BlockchainContext from '../store/blockchain-context';
+
+const AuctionList = () => {
   // State to store auctions
   const [auctions, setAuctions] = useState([]);
 
+  const blockchainContext = useContext(BlockchainContext);
+  const provider = blockchainContext.provider;
+
   useEffect(() => {
     (async () => {
-      blockchain.ebay && setAuctions(await blockchain.ebay.getAuctions());
+      provider.ebay && setAuctions(await provider.ebay.getAuctions());
     })();
-  }, [blockchain]);
+  }, [provider]);
 
   return (
     <Container>
@@ -49,7 +54,10 @@ const AuctionList = ({ blockchain }) => {
                 </small>
                 <br />
                 <small className="text-muted">
-                  Posted by: <b>{auction.seller}</b>
+                Posted by: 
+                  <Link to={`/seller/${auction.seller}/${auction.id}`}>
+                     <b>{auction.seller}</b>
+                  </Link>
                 </small>
               </Card.Footer>
             </Card>

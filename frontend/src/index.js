@@ -5,13 +5,16 @@ import App from "./App";
 import reportWebVitals from "./reportWebVitals";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { BrowserRouter } from "react-router-dom";
+import { BlockchainContextProvider } from "./store/blockchain-context";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <BlockchainContextProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </BlockchainContextProvider>
   </React.StrictMode>
 );
 
